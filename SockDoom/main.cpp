@@ -3,8 +3,6 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-using namespace std;
-
 // defines for window settings
 #define res                1                       // window resolution: 1=200x150 2=400x300 4=800x600
 #define SW                 200*res                 // screen width
@@ -70,8 +68,8 @@ struct Sector {
 	int dist;
 };
 
-Time _time;
-Keys _key;
+Time frameTime;
+Keys keys;
 Rotation rot;
 Player player;
 Wall walls[30];
@@ -135,14 +133,14 @@ void pixel(int x, int y, int color) {
 
 void movePlayer() {
 	// move up, down, left, right
-	if (_key.a == 1 && _key.mlook == 0) {
+	if (keys.a == 1 && keys.mlook == 0) {
 		player.angle -= 4;
 
 		if (player.angle < 0) {
 			player.angle += 360;
 		}
 	}
-	if (_key.d == 1 && _key.mlook == 0) {
+	if (keys.d == 1 && keys.mlook == 0) {
 		player.angle += 4;
 
 		if (player.angle > 359) {
@@ -153,36 +151,36 @@ void movePlayer() {
 	int deltaX = rot.sin[player.angle] * 10.0;
 	int deltaY = rot.cos[player.angle] * 10.0;
 
-	if (_key.w == 1 && _key.mlook == 0) {
+	if (keys.w == 1 && keys.mlook == 0) {
 		player.x += deltaX;
 		player.y += deltaY;
 	}
-	if (_key.s == 1 && _key.mlook == 0) {
+	if (keys.s == 1 && keys.mlook == 0) {
 		player.x -= deltaX;
 		player.y -= deltaY;
 	}
 
 	// strafe left, right
-	if (_key.strafeL == 1) {
+	if (keys.strafeL == 1) {
 		player.x -= deltaY;
 		player.y += deltaX;
 	}
-	if (_key.strafeR == 1) {
+	if (keys.strafeR == 1) {
 		player.x += deltaY;
 		player.y -= deltaX;
 	}
 
 	// move up, down, look up, look down
-	if (_key.a == 1 && _key.mlook == 1) {
+	if (keys.a == 1 && keys.mlook == 1) {
 		player.look -= 1;
 	}
-	if (_key.d == 1 && _key.mlook == 1) {
+	if (keys.d == 1 && keys.mlook == 1) {
 		player.look += 1;
 	}
-	if (_key.w == 1 && _key.mlook == 1) {
+	if (keys.w == 1 && keys.mlook == 1) {
 		player.z -= 4;
 	}
-	if (_key.s == 1 && _key.mlook == 1) {
+	if (keys.s == 1 && keys.mlook == 1) {
 		player.z += 4;
 	}
 }
@@ -375,45 +373,45 @@ void display(GLFWwindow* window) {
 	int x, y;
 
 	// only draw 20 frames/second
-	if (_time.frame1 - _time.frame2 >= 50) {
+	if (frameTime.frame1 - frameTime.frame2 >= 50) {
 		clearBackground();
 		movePlayer();
 		draw3D();
 
-		_time.frame2 = _time.frame1;
+		frameTime.frame2 = frameTime.frame1;
 		// swap buffers
 		glfwSwapBuffers(window);
 	}
 
 	// 1000 Milliseconds per second
-	_time.frame1 = static_cast<int>(glfwGetTime() * 1000);
+	frameTime.frame1 = static_cast<int>(glfwGetTime() * 1000);
 }
 
-void processInput(GLFWwindow* window, int key, int scancode, int action, int mods) {
+void processInput(GLFWwindow* window, int keyPressed, int scancode, int action, int mods) {
 	if (action == GLFW_PRESS || action == GLFW_RELEASE) {
 		int state = (action == GLFW_PRESS) ? 1 : 0;
 
-		switch (key) {
+		switch (keyPressed) {
 			case GLFW_KEY_W:
-				_key.w = state;
+				keys.w = state;
 				break;
 			case GLFW_KEY_S:
-				_key.s = state;
+				keys.s = state;
 				break;
 			case GLFW_KEY_A:
-				_key.a = state;
+				keys.a = state;
 				break;
 			case GLFW_KEY_D:
-				_key.d = state;
+				keys.d = state;
 				break;
 			case GLFW_KEY_M:
-				_key.mlook = state;
+				keys.mlook = state;
 				break;
 			case GLFW_KEY_E:
-				_key.strafeR = state;
+				keys.strafeR = state;
 				break;
 			case GLFW_KEY_Q:
-				_key.strafeL = state;
+				keys.strafeL = state;
 				break;
 			case GLFW_KEY_ESCAPE:
 				glfwSetWindowShouldClose(window, true);
@@ -503,13 +501,13 @@ void init() {
 
 int main() {
 	if (!glfwInit()) {
-		cout << "Failed to initialize GLFW" << endl;
+		std::cout << "Failed to initialize GLFW" << std::endl;
 		return -1;
 	}
 
 	GLFWwindow* window = glfwCreateWindow(GLSW, GLSH, "Sock Doom", nullptr, nullptr);
 	if (window == NULL) {
-		cout << "Failed to open GLFW window" << endl;
+		std::cout << "Failed to open GLFW window" << std::endl;
 		glfwTerminate();
 		return -1;
 	}
@@ -520,7 +518,7 @@ int main() {
 	glfwMakeContextCurrent(window);
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-		cout << "Failed to initialize GLAD" << endl;
+		std::cout << "Failed to initialize GLAD" << std::endl;
 		return -1;
 	}
 
