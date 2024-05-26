@@ -66,6 +66,12 @@ struct Sector {
 	int x, y;
 	// add y distances to sort drawing order
 	int dist;
+	// bottom and top colors
+	int colorBot, colorTop;
+	// array to hold points for surface
+	int surfaces[SW];
+	// variable to determine which surface to draw (top, bottom, none)
+	int surface;
 };
 
 Time frameTime;
@@ -219,7 +225,7 @@ void cullBehindPlayer(int* x1, int* y1, int* z1, int x2, int y2, int z2) {
 	*z1 = *z1 + norm * (z2 - (*z1));
 }
 
-void drawWall(int x1, int x2, int b1, int b2, int t1, int t2, int color) {
+void drawWall(int x1, int x2, int b1, int b2, int t1, int t2, int color, int surfaceNum) {
 	int x, y;
 
 	// hold the difference in distnce between the bottom two points (b1 and b2)
@@ -268,6 +274,30 @@ void drawWall(int x1, int x2, int b1, int b2, int t1, int t2, int color) {
 			y2 = SH - 1;
 		}
 
+		// draw surface
+		if (sectors[surfaceNum].surface == 1) {
+			// save bottom points
+			sectors[surfaceNum].surfaces[x] = y1;
+			continue;
+		}
+		if (sectors[surfaceNum].surface == 2) {
+			// save top points
+			sectors[surfaceNum].surfaces[x] = y2;
+			continue;
+		}
+		if (sectors[surfaceNum].surface == -1) {
+			// bottom
+			for (y = sectors[surfaceNum].surfaces[x]; y < y1; y++) {
+				pixel(x, y, sectors[surfaceNum].colorBot);
+			}
+		}
+		if (sectors[surfaceNum].surface == -2) {
+			// top
+			for (y = y1; y < sectors[surfaceNum].surfaces[x]; y++) {
+				pixel(x, y, sectors[surfaceNum].colorTop);
+			}
+		}
+
 		// draw wall points
 		for (y = y1; y < y2; y++) {
 			pixel(x, y, color);
@@ -281,7 +311,7 @@ int distance(int x1, int y1, int x2, int y2) {
 }
 
 void draw3D() {
-	int s, w;
+	int s, w, i;
 	int wallX[4], wallY[4], wallZ[4];
 	float wallCos = rot.cos[player.angle];
 	float wallSin = rot.sin[player.angle];
@@ -301,71 +331,101 @@ void draw3D() {
 	for (s = 0; s < numSect; s++) {
 		//clear distance
 		sectors[s].dist = 0;
-		for (w = sectors[s].wallStart; w < sectors[s].wallEnd; w++) {
-			// offset the bottom 2 points by player position
-			int x1 = walls[w].x1 - player.x;
-			int y1 = walls[w].y1 - player.y;
-			int x2 = walls[w].x2 - player.x;
-			int y2 = walls[w].y2 - player.y;
 
-			// rotate points around player for wall x position
-			wallX[0] = x1 * wallCos - y1 * wallSin;
-			wallX[1] = x2 * wallCos - y2 * wallSin;
-			// top line has same x
-			wallX[2] = wallX[0];
-			wallX[3] = wallX[1];
-
-			// rotate points around player for wall y position
-			wallY[0] = y1 * wallCos + x1 * wallSin;
-			wallY[1] = y2 * wallCos + x2 * wallSin;
-			// top line has same y
-			wallY[2] = wallY[0];
-			wallY[3] = wallY[1];
-
-			// store this wall's distance
-			sectors[s].dist += distance(0, 0, (wallX[0] + wallX[1]) / 2, (wallY[0] + wallY[1]) / 2);
-
-			// rotate points around player for wall z position
-			wallZ[0] = sectors[s].z1 - player.z + ((player.look * wallY[0]) / 32.0);
-			wallZ[1] = sectors[s].z1 - player.z + ((player.look * wallY[1]) / 32.0);
-			// top line has higher z
-			wallZ[2] = wallZ[0] + sectors[s].z2;
-			wallZ[3] = wallZ[1] + sectors[s].z2;
-
-			// dont draw if behind player
-			if (wallY[0] < 1 && wallY[1] < 1) {
-				continue;
-			}
-			// cull if one side is behind player
-			if (wallY[0] < 1) {
-				// bottom line
-				cullBehindPlayer(&wallX[0], &wallY[0], &wallZ[0], wallX[1], wallY[1], wallZ[1]);
-				// top line
-				cullBehindPlayer(&wallX[2], &wallY[2], &wallZ[2], wallX[3], wallY[3], wallZ[3]);
-			}
-			// cull if other side is behing player
-			if (wallY[1] < 1) {
-				// bottom line
-				cullBehindPlayer(&wallX[1], &wallY[1], &wallZ[1], wallX[0], wallY[0], wallZ[0]);
-				// top line
-				cullBehindPlayer(&wallX[3], &wallY[3], &wallZ[3], wallX[2], wallY[2], wallZ[2]);
-			}
-
-			// convert wall world position into screen position
-			wallX[0] = wallX[0] * 200 / wallY[0] + SW2;
-			wallY[0] = wallZ[0] * 200 / wallY[0] + SH2;
-			wallX[1] = wallX[1] * 200 / wallY[1] + SW2;
-			wallY[1] = wallZ[1] * 200 / wallY[1] + SH2;
-			wallX[2] = wallX[2] * 200 / wallY[2] + SW2;
-			wallY[2] = wallZ[2] * 200 / wallY[2] + SH2;
-			wallX[3] = wallX[3] * 200 / wallY[3] + SW2;
-			wallY[3] = wallZ[3] * 200 / wallY[3] + SH2;
-
-			// draw points
-			drawWall(wallX[0], wallX[1], wallY[0], wallY[1], wallY[2], wallY[3], walls[w].color);
+		// bottom surface
+		if (player.z < sectors[s].z1) {
+			sectors[s].surface = 1;
 		}
-		// find average sector distance
-		sectors[s].dist /= (sectors[s].wallEnd - sectors[s].wallStart);
+		// top surface
+		else if (player.z > sectors[s].z2) {
+			sectors[s].surface = 2;
+		}
+		// no surface
+		else {
+			sectors[s].surface = 0;
+		}
+
+		// loop to draw back faces of walls
+		for (i = 0; i < 2; i++) {
+			for (w = sectors[s].wallStart; w < sectors[s].wallEnd; w++) {
+				// offset the bottom 2 points by player position
+				int x1 = walls[w].x1 - player.x;
+				int y1 = walls[w].y1 - player.y;
+				int x2 = walls[w].x2 - player.x;
+				int y2 = walls[w].y2 - player.y;
+
+				// swap for surface
+				if (i == 0) {
+					int swap = x1;
+					x1 = x2;
+					x2 = swap;
+					swap = y1;
+					y1 = y2;
+					y2 = swap;
+				}
+
+				// rotate points around player for wall x position
+				wallX[0] = x1 * wallCos - y1 * wallSin;
+				wallX[1] = x2 * wallCos - y2 * wallSin;
+				// top line has same x
+				wallX[2] = wallX[0];
+				wallX[3] = wallX[1];
+
+				// rotate points around player for wall y position
+				wallY[0] = y1 * wallCos + x1 * wallSin;
+				wallY[1] = y2 * wallCos + x2 * wallSin;
+				// top line has same y
+				wallY[2] = wallY[0];
+				wallY[3] = wallY[1];
+
+				// store this wall's distance
+				sectors[s].dist += distance(0, 0, (wallX[0] + wallX[1]) / 2, (wallY[0] + wallY[1]) / 2);
+
+				// rotate points around player for wall z position
+				wallZ[0] = sectors[s].z1 - player.z + ((player.look * wallY[0]) / 32.0);
+				wallZ[1] = sectors[s].z1 - player.z + ((player.look * wallY[1]) / 32.0);
+				// top line has higher z
+				wallZ[2] = wallZ[0] + sectors[s].z2;
+				wallZ[3] = wallZ[1] + sectors[s].z2;
+
+				// dont draw if behind player
+				if (wallY[0] < 1 && wallY[1] < 1) {
+					continue;
+				}
+				// cull if one side is behind player
+				if (wallY[0] < 1) {
+					// bottom line
+					cullBehindPlayer(&wallX[0], &wallY[0], &wallZ[0], wallX[1], wallY[1], wallZ[1]);
+					// top line
+					cullBehindPlayer(&wallX[2], &wallY[2], &wallZ[2], wallX[3], wallY[3], wallZ[3]);
+				}
+				// cull if other side is behing player
+				if (wallY[1] < 1) {
+					// bottom line
+					cullBehindPlayer(&wallX[1], &wallY[1], &wallZ[1], wallX[0], wallY[0], wallZ[0]);
+					// top line
+					cullBehindPlayer(&wallX[3], &wallY[3], &wallZ[3], wallX[2], wallY[2], wallZ[2]);
+				}
+
+				// convert wall world position into screen position
+				wallX[0] = wallX[0] * 200 / wallY[0] + SW2;
+				wallY[0] = wallZ[0] * 200 / wallY[0] + SH2;
+				wallX[1] = wallX[1] * 200 / wallY[1] + SW2;
+				wallY[1] = wallZ[1] * 200 / wallY[1] + SH2;
+				wallX[2] = wallX[2] * 200 / wallY[2] + SW2;
+				wallY[2] = wallZ[2] * 200 / wallY[2] + SH2;
+				wallX[3] = wallX[3] * 200 / wallY[3] + SW2;
+				wallY[3] = wallZ[3] * 200 / wallY[3] + SH2;
+
+				// draw points
+				drawWall(wallX[0], wallX[1], wallY[0], wallY[1], wallY[2], wallY[3], walls[w].color, s);
+			}
+
+			// find average sector distance
+			sectors[s].dist /= (sectors[s].wallEnd - sectors[s].wallStart);
+			// flip surface number to negative to draw surface
+			sectors[s].surface *= -1;
+		}
 	}
 }
 
@@ -421,11 +481,11 @@ void processInput(GLFWwindow* window, int keyPressed, int scancode, int action, 
 }
 
 int loadSectors[] = {
-	// wall start, wall end, z1 (bottom of wall) height, z2 (top of wall) height
-	 0,  4,  0, 40,  // sector 1
-	 4,  8,  0, 40,  // sector 2
-	 8, 12,  0, 40,  // sector 3
-    12, 16,  0, 40,  // sector 4
+	// wall start, wall end, z1 (bottom of wall) height, z2 (top of wall) height, bottom color, top color
+	 0,  4,  0, 40,  2,  3,  // sector 1
+	 4,  8,  0, 40,  4,  5,  // sector 2
+	 8, 12,  0, 40,  6,  7,  // sector 3
+    12, 16,  0, 40,  0,  1,  // sector 4
 };
 
 int loadWalls[] = {
@@ -480,7 +540,11 @@ void init() {
 		sectors[s].z1 = loadSectors[v1 + 2];
 		// sector top height
 		sectors[s].z2 = loadSectors[v1 + 3] - loadSectors[v1 + 2];
-		v1 += 4;
+		// sector bottom color
+		sectors[s].colorBot = loadSectors[v1 + 4];
+		// sector top color
+		sectors[s].colorTop = loadSectors[v1 + 5];
+		v1 += 6;
 		
 		// load walls
 		for (w = sectors[s].wallStart; w < sectors[s].wallEnd; w++) {
